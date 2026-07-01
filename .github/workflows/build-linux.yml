@@ -1,0 +1,41 @@
+name: Build Linux
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  build-linux:
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3-tk tk-dev
+
+      - name: Build PRISM
+        run: |
+          python --version
+          rm -rf .venv-build build dist
+          bash scripts/build/build_linux.sh
+
+      - name: Package Linux build
+        run: |
+          tar -czf PRISM-linux-x86_64-ubuntu22.04.tar.gz -C dist PRISM
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: PRISM-linux-x86_64-ubuntu22.04
+          path: PRISM-linux-x86_64-ubuntu22.04.tar.gz
