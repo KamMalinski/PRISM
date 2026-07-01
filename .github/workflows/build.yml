@@ -1,41 +1,115 @@
-name: Build Linux
+name: Build PRISM
 
 on:
   workflow_dispatch:
   push:
-    tags:
-      - "v*"
+    branches: ["main"]
+  pull_request:
+
+permissions:
+  contents: read
 
 jobs:
-  build-linux:
-    runs-on: ubuntu-22.04
+  test:
+    name: Tests (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.13"]
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: |
+            pyproject.toml
+            requirements.txt
 
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y python3-tk tk-dev
+      - name: Install Linux GUI libraries
+        run: sudo apt-get update && sudo apt-get install -y python3-tk libgl1 libglib2.0-0 xvfb
 
-      - name: Build PRISM
-        run: |
-          python --version
-          rm -rf .venv-build build dist
-          bash scripts/build/build_linux.sh
+      - name: Install package
+        run: python -m pip install -r requirements.txt
 
-      - name: Package Linux build
-        run: |
-          tar -czf PRISM-linux-x86_64-ubuntu22.04.tar.gz -C dist PRISM
+      - name: Compile source
+        run: python -m compileall -q src scripts tests
 
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
+      - name: Unit tests
+        run: python -m unittest discover -s tests -v
+
+      - name: Smoke test
+        run: xvfb-run -a python -m schematic_generator --ui-smoke-test
+
+  build:
+    name: ${{ matrix.name }}
+    needs: test
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows
+            os: windows-latest
+            script: .\scripts\build\build_windows.ps1
+          - name: macOS
+            os: macos-latest
+            script: bash scripts/build/build_macos.sh
+          - name: Linux
+            os: ubuntu-latest
+            script: bash scripts/build/build_linux.sh
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
         with:
-          name: PRISM-linux-x86_64-ubuntu22.04
-          path: PRISM-linux-x86_64-ubuntu22.04.tar.gz
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: |
+            pyproject.toml
+            requirements-build.txt
+
+      - name: Install Linux GUI libraries
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y python3-tk libgl1 libglib2.0-0 xvfb
+
+      - name: Compile source
+        run: python -m compileall -q src scripts
+
+      - name: Build Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ${{ matrix.script }}
+
+      - name: Build Unix
+        if: runner.os != 'Windows'
+        shell: bash
+        run: ${{ matrix.script }}
+
+      - name: Smoke test Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $process = Start-Process .\dist\PRISM\PRISM.exe -ArgumentList "--ui-smoke-test" -PassThru -Wait
+          if ($process.ExitCode -ne 0) {
+            throw "PRISM smoke test failed with exit code $($process.ExitCode)."
+          }
+
+      - name: Smoke test Linux
+        if: runner.os == 'Linux'
+        run: xvfb-run -a ./dist/PRISM/PRISM --ui-smoke-test
+
+      - name: Smoke test macOS
+        if: runner.os == 'macOS'
+        run: ./dist/PRISM.app/Contents/MacOS/PRISM --ui-smoke-test
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PRISM-${{ matrix.name }}
+          path: dist/
+          if-no-files-found: error
