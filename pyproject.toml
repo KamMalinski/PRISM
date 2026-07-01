@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "prism-pcb"
+version = "0.1.0"
+description = "PCB image reconstruction and KiCad schematic generation"
+readme = "README.md"
+requires-python = ">=3.11"
+keywords = ["pcb", "kicad", "computer-vision", "schematic", "ocr"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Win32 (MS Windows)",
+    "Environment :: MacOS X",
+    "Environment :: X11 Applications",
+    "Intended Audience :: Science/Research",
+    "Intended Audience :: Manufacturing",
+    "Operating System :: MacOS",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Topic :: Scientific/Engineering :: Electronic Design Automation (EDA)",
+]
+dependencies = [
+    "numpy==2.4.6",
+    "opencv-python==4.13.0.92",
+    "Pillow==12.2.0",
+    "pytesseract==0.3.13",
+]
+
+[project.gui-scripts]
+prism = "schematic_generator.gui_facade:run_gui"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+schematic_generator = ["assets/*"]
